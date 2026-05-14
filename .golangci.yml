@@ -1,0 +1,39 @@
+version: 2
+
+linters:
+  enable:
+    - asciicheck
+    - bodyclose
+    - dupl
+    - gocognit
+    - goconst
+    - gocritic
+    - revive
+    - nakedret
+    - nestif
+    - prealloc
+    - unconvert
+    - whitespace
+    - lll
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - ineffassign
+    - errorlint
+    - wrapcheck
+    - funlen
+  exclusions:
+    presets:
+      - comments
+  settings:
+    funlen:
+      lines: 100
+      statements: 50
+
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - gofumpt

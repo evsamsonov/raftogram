@@ -1,0 +1,25 @@
+cluster:
+  # Stable identifier of this node. Must match one entry in peers.
+  node_id: "node1"
+
+  # Address this node listens on for Raft inter-node traffic.
+  raft_bind_addr: "127.0.0.1:7000"
+
+  # Address this node listens on for client gRPC traffic.
+  grpc_bind_addr: "127.0.0.1:9000"
+
+  # Base directory for BoltDB log/stable stores and Raft snapshots.
+  data_dir: "/var/lib/raftogram/node1"
+
+  # Full static membership list including this node.
+  # Number of peers must be odd (e.g. 3, 5) to form a valid quorum.
+  peers:
+    - node_id: "node1"
+      raft_addr: "127.0.0.1:7000"
+      grpc_addr: "127.0.0.1:9000"
+    - node_id: "node2"
+      raft_addr: "127.0.0.1:7001"
+      grpc_addr: "127.0.0.1:9001"
+    - node_id: "node3"
+      raft_addr: "127.0.0.1:7002"
+      grpc_addr: "127.0.0.1:9002"
