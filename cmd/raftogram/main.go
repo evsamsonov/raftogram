@@ -62,7 +62,7 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	node, err := raftcluster.Open(*cfg, &messenger.FSM{}, stores, logger)
+	node, err := raftcluster.Open(*cfg, messenger.NewDefaultFSM(), stores, logger)
 	if err != nil {
 		return fmt.Errorf("open raft node: %w", err)
 	}

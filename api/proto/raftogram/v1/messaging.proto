@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package raftogram.v1;
+
+option go_package = "github.com/evsamsonov/raftogram/internal/gen/raftogrampb;raftogrampb";
+
+message RaftLogEntry {
+  uint32 wire_version = 1;
+
+  // Command tags start at 10 to reserve low field numbers
+  // for future envelope metadata in RaftLogEntry.
+  oneof command {
+    CreateChannelCommand create_channel = 10;
+    SendMessageCommand send_message = 11;
+  }
+}
+
+message CreateChannelCommand {
+  string channel_id = 1;
+  string name = 2;
+}
+
+message SendMessageCommand {
+  string channel_id = 1;
+  string author_id = 2;
+  bytes payload = 3;
+  string client_message_id = 4;
+}
+
+message SnapshotState {
+  repeated ChannelSnapshot channels = 1;
+}
+
+message ChannelSnapshot {
+  string channel_id = 1;
+  string name = 2;
+  repeated StoredMessage messages = 3;
+}
+
+message StoredMessage {
+  uint64 sequence = 1;
+  string author_id = 2;
+  bytes payload = 3;
+  string client_message_id = 4;
+}
