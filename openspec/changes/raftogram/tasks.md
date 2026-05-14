@@ -6,10 +6,10 @@
 
 ## 2. Интеграция Raft-кластера
 
-- [ ] 2.1 Подключить `github.com/hashicorp/raft` и `github.com/hashicorp/raft-boltdb`: `LogStore`/`StableStore` на BoltDB, `SnapshotStore` через `raft.NewFileSnapshotStore` на локальном диске
-- [ ] 2.2 Реализовать сетевой транспорт между узлами для Hashicorp Raft и bootstrap/join по статической конфигурации
-- [ ] 2.3 Экспортировать health/metrics: роль узла, известный лидер, готовность к приёму клиентских мутаций
-- [ ] 2.5 Настроить пороги снапшотирования Raft (число записей и/или размер лога) и связку `Snapshot`/`Restore` с FSM
+- [x] 2.1 Подключить `github.com/hashicorp/raft` и `github.com/hashicorp/raft-boltdb`: `LogStore`/`StableStore` на BoltDB, `SnapshotStore` через `raft.NewFileSnapshotStore` на локальном диске
+- [x] 2.2 Реализовать сетевой транспорт между узлами для Hashicorp Raft и bootstrap/join по статической конфигурации
+- [x] 2.3 Экспортировать health/metrics: роль узла, известный лидер, готовность к приёму клиентских мутаций
+- [x] 2.5 Настроить пороги снапшотирования Raft (число записей и/или размер лога) и связку `Snapshot`/`Restore` с FSM
 
 - [ ] 3.1 Описать команды домена в `.proto` (Protobuf), wire-формат в логе Raft и версионирование записей лога
 - [ ] 3.2 Реализовать детерминированное применение команд к in-memory модели каналов/сообщений с лимитом размера сообщения и дедупликацией по `(channel_id, client_message_id)` при непустом ключе

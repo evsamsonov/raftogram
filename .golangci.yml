@@ -21,7 +21,6 @@ linters:
     - unused
     - ineffassign
     - errorlint
-    - wrapcheck
     - funlen
   exclusions:
     presets:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,16 +12,19 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/evsamsonov/raftogram/internal/config"
+	"github.com/evsamsonov/raftogram/internal/messenger"
+	"github.com/evsamsonov/raftogram/internal/raftcluster"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	if err := run(ctx); err != nil {
+		stop()
 		fmt.Fprintf(os.Stderr, "raftogram: %v\n", err)
 		os.Exit(1)
 	}
+
+	stop()
 }
 
 func run(ctx context.Context) error {
@@ -47,6 +51,26 @@ func run(ctx context.Context) error {
 		zap.String("grpc_bind", cfg.Cluster.GRPCBindAddr),
 		zap.Int("peers", len(cfg.Cluster.Peers)),
 	)
+
+	stores, err := raftcluster.OpenPersistentRaftStores(cfg.Cluster.DataDir, io.Discard)
+	if err != nil {
+		return fmt.Errorf("open raft stores: %w", err)
+	}
+	defer func() {
+		if err := stores.Close(); err != nil {
+			logger.Error("Close raft stores", zap.Error(err))
+		}
+	}()
+
+	node, err := raftcluster.Open(*cfg, &messenger.FSM{}, stores, logger)
+	if err != nil {
+		return fmt.Errorf("open raft node: %w", err)
+	}
+	defer func() {
+		if err := node.Shutdown(); err != nil {
+			logger.Error("Shutdown raft node", zap.Error(err))
+		}
+	}()
 
 	<-ctx.Done()
 	logger.Info("Shutting down")

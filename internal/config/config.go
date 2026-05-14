@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Peer is a single cluster member's network addresses.
@@ -30,9 +31,24 @@ type Cluster struct {
 	Peers []Peer `yaml:"peers"`
 }
 
+// RaftTuning holds optional overrides for Raft consensus parameters.
+// Zero values use Hashicorp Raft library defaults.
+type RaftTuning struct {
+	// SnapshotInterval is how often to check whether a new snapshot should be
+	// triggered. Default: 120s.
+	SnapshotInterval time.Duration `yaml:"snapshot_interval"`
+	// SnapshotThreshold is the minimum number of committed log entries since the
+	// last snapshot before a new one is triggered. Default: 8192.
+	SnapshotThreshold uint64 `yaml:"snapshot_threshold"`
+	// TrailingLogs is the number of log entries retained after a snapshot for
+	// fast follower catch-up. Default: 10240.
+	TrailingLogs uint64 `yaml:"trailing_logs"`
+}
+
 // Config is the root configuration for a raftogram server.
 type Config struct {
-	Cluster Cluster `yaml:"cluster"`
+	Cluster Cluster    `yaml:"cluster"`
+	Raft    RaftTuning `yaml:"raft"`
 }
 
 // Validate returns an error if the configuration is invalid.
