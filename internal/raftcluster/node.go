@@ -25,7 +25,7 @@ type Node struct {
 //
 // Snapshot thresholds from cfg.Raft override Raft library defaults when
 // non-zero. Raft-internal logs are silenced here; key transitions are surfaced
-// through zap in task 5.1.
+// through zap via raftcluster.StartObserver and snapshot store logging.
 func Open(cfg config.Config, fsm raft.FSM, stores *PersistentRaftStores, logger *zap.Logger) (*Node, error) {
 	nullLog := hclog.NewNullLogger()
 

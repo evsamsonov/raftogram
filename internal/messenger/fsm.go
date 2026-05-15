@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/evsamsonov/raftogram/internal/gen/raftogrampb"
@@ -34,6 +36,7 @@ var (
 type FSM struct {
 	mu sync.RWMutex
 
+	logger         *zap.Logger
 	maxMessageSize int
 	channels       map[string]*channelState
 	dedupByChannel map[string]map[string]uint64
@@ -69,11 +72,17 @@ var _ raft.FSM = (*FSM)(nil)
 
 // NewFSM returns a deterministic messenger FSM with an in-memory state model.
 func NewFSM(maxMessageSize int) (*FSM, error) {
+	return NewFSMWithLogger(maxMessageSize, nil)
+}
+
+// NewFSMWithLogger is like NewFSM and logs apply failures when logger is non-nil.
+func NewFSMWithLogger(maxMessageSize int, logger *zap.Logger) (*FSM, error) {
 	if maxMessageSize <= 0 {
 		return nil, ErrInvalidMaxMessageSize
 	}
 
 	return &FSM{
+		logger:         logger,
 		maxMessageSize: maxMessageSize,
 		channels:       make(map[string]*channelState),
 		dedupByChannel: make(map[string]map[string]uint64),
@@ -81,8 +90,8 @@ func NewFSM(maxMessageSize int) (*FSM, error) {
 }
 
 // NewDefaultFSM returns a messenger FSM configured with project defaults.
-func NewDefaultFSM() *FSM {
-	fsm, _ := NewFSM(DefaultMaxMessageSizeBytes)
+func NewDefaultFSM(logger *zap.Logger) *FSM {
+	fsm, _ := NewFSMWithLogger(DefaultMaxMessageSizeBytes, logger)
 	return fsm
 }
 
@@ -91,8 +100,11 @@ func NewDefaultFSM() *FSM {
 func (f *FSM) Apply(logEntry *raft.Log) interface{} {
 	decoded, err := DecodeRaftLogEntry(logEntry.Data)
 	if err != nil {
+		f.logApplyFailure(logEntry, "decode", err)
 		return err
 	}
+
+	commandType := raftCommandType(decoded)
 
 	f.mu.Lock()
 
@@ -113,11 +125,58 @@ func (f *FSM) Apply(logEntry *raft.Log) interface{} {
 
 	f.mu.Unlock()
 
+	if err, ok := result.(error); ok {
+		f.logApplyFailure(logEntry, commandType, err)
+	}
+
 	if commitMessage != nil {
 		f.commits.publish(commitChannel, commitMessage)
 	}
 
 	return result
+}
+
+func (f *FSM) logApplyFailure(logEntry *raft.Log, commandType string, err error) {
+	if f.logger == nil || err == nil {
+		return
+	}
+
+	fields := []zap.Field{
+		zap.Uint64("index", logEntry.Index),
+		zap.Uint64("term", logEntry.Term),
+		zap.Uint8("log_type", uint8(logEntry.Type)),
+		zap.String("command", commandType),
+		zap.Error(err),
+	}
+
+	if applyErrLevel(err) == zapcore.ErrorLevel {
+		f.logger.Error("FSM apply failed", fields...)
+		return
+	}
+
+	f.logger.Warn("FSM apply failed", fields...)
+}
+
+func applyErrLevel(err error) zapcore.Level {
+	switch {
+	case errors.Is(err, ErrChannelNotFound),
+		errors.Is(err, ErrMissingChannelID),
+		errors.Is(err, ErrPayloadTooLarge):
+		return zapcore.WarnLevel
+	default:
+		return zapcore.ErrorLevel
+	}
+}
+
+func raftCommandType(entry *raftogrampb.RaftLogEntry) string {
+	switch entry.GetCommand().(type) {
+	case *raftogrampb.RaftLogEntry_CreateChannel:
+		return "create_channel"
+	case *raftogrampb.RaftLogEntry_SendMessage:
+		return "send_message"
+	default:
+		return "unknown"
+	}
 }
 
 // SubscribeCommits registers a buffered stream of newly committed messages for

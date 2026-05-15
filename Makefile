@@ -19,7 +19,7 @@ test: ## Run tests
 	go test ./...
 
 build: ## Build service
-	go build ./cmd/main.go
+	go build -o raftogram ./cmd/raftogram
 
 doc: ## Run doc server using docker
 	@echo "Doc server runs on http://127.0.0.1:6060"

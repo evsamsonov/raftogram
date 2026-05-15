@@ -139,7 +139,7 @@ func TestReadHistoryOnFollowerReturnsNotLeader(t *testing.T) {
 func newTestServer(t *testing.T, bootstrap bool) (*Server, func()) {
 	t.Helper()
 
-	fsm := messenger.NewDefaultFSM()
+	fsm := messenger.NewDefaultFSM(nil)
 
 	raftCfg := raft.DefaultConfig()
 	raftCfg.LocalID = raft.ServerID("node1")

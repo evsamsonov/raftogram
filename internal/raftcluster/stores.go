@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"go.uber.org/zap"
 )
 
 // PersistentRaftStores wires BoltDB-backed Raft log and stable stores plus a
@@ -24,13 +25,9 @@ type PersistentRaftStores struct {
 
 // OpenPersistentRaftStores creates cluster.data_dir if needed, opens separate
 // BoltDB files for the Raft log and stable store, and a FileSnapshotStore in
-// data_dir/snapshots. snapshotLog receives snapshot-compaction diagnostics from
-// Hashicorp Raft; pass io.Discard to silence it.
-func OpenPersistentRaftStores(dataDir string, snapshotLog io.Writer) (*PersistentRaftStores, error) {
-	if snapshotLog == nil {
-		snapshotLog = io.Discard
-	}
-
+// data_dir/snapshots. When logger is non-nil, snapshot create/compact events are
+// written as structured zap logs.
+func OpenPersistentRaftStores(dataDir string, logger *zap.Logger) (*PersistentRaftStores, error) {
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -56,7 +53,7 @@ func OpenPersistentRaftStores(dataDir string, snapshotLog io.Writer) (*Persisten
 		)
 	}
 
-	snapStore, err := raft.NewFileSnapshotStore(snapDir, 2, snapshotLog)
+	snapStore, err := raft.NewFileSnapshotStoreWithLogger(snapDir, 2, newSnapshotHclogLogger(logger))
 	if err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("open file snapshot store: %w", err),

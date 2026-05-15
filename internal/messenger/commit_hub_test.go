@@ -41,7 +41,7 @@ func TestCommitHubPublishBlocksWhenBufferFull(t *testing.T) {
 }
 
 func TestFSMSubscribeCommitsReceivesNewCommits(t *testing.T) {
-	fsm := NewDefaultFSM()
+	fsm := NewDefaultFSM(nil)
 
 	applyEntry(t, fsm, 1, &raftogrampb.RaftLogEntry{
 		WireVersion: CurrentWireVersion,
@@ -74,7 +74,7 @@ func TestFSMSubscribeCommitsReceivesNewCommits(t *testing.T) {
 }
 
 func TestFSMSubscribeCommitsSkipsDeduplicatedApply(t *testing.T) {
-	fsm := NewDefaultFSM()
+	fsm := NewDefaultFSM(nil)
 
 	applyEntry(t, fsm, 1, &raftogrampb.RaftLogEntry{
 		WireVersion: CurrentWireVersion,

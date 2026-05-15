@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -53,7 +52,7 @@ func run(ctx context.Context) error {
 		zap.Int("peers", len(cfg.Cluster.Peers)),
 	)
 
-	stores, err := raftcluster.OpenPersistentRaftStores(cfg.Cluster.DataDir, io.Discard)
+	stores, err := raftcluster.OpenPersistentRaftStores(cfg.Cluster.DataDir, logger)
 	if err != nil {
 		return fmt.Errorf("open raft stores: %w", err)
 	}
@@ -63,12 +62,13 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	fsm := messenger.NewDefaultFSM()
+	fsm := messenger.NewDefaultFSM(logger.Named("fsm"))
 
 	node, err := raftcluster.Open(*cfg, fsm, stores, logger)
 	if err != nil {
 		return fmt.Errorf("open raft node: %w", err)
 	}
+	raftcluster.StartObserver(ctx, node.Raft, cfg.Cluster.NodeID, logger)
 	defer func() {
 		if err := node.Shutdown(); err != nil {
 			logger.Error("Shutdown raft node", zap.Error(err))
