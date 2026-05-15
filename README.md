@@ -100,6 +100,155 @@ Example leader response:
 
 Client gRPC traffic goes to `leader_grpc_addr` (see design in `openspec/changes/raftogram/design.md`).
 
+## Client API with grpcurl
+
+[gRPCurl](https://github.com/fullstorydev/grpcurl) calls the `Messenger` service from the command line. Reflection is not enabled on the server; pass the proto file on every invocation.
+
+Install (macOS / Linux):
+
+```bash
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+```
+
+Run from the repository root. Every example uses the same flags; only the host (`host:port`) and `-d` body change.
+
+Mutations (`CreateChannel`, `SendMessage`) must hit the **leader**; `ReadHistory` and `Subscribe` do too in the current implementation. Find it with:
+
+```bash
+curl -s http://127.0.0.1:8080/health | jq -r .leader_grpc_addr
+# → 127.0.0.1:9000  (example; use the value you get)
+```
+
+The examples below use `127.0.0.1:9000` — replace with your `leader_grpc_addr` if the leader is another node.
+
+List methods:
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  127.0.0.1:9000 list raftogram.v1.Messenger
+```
+
+### CreateChannel
+
+Creates a channel on the Raft log. Omit `channel_id` to let the server assign one (`channel-<log index>`).
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d '{"name":"general"}' \
+  127.0.0.1:9000 raftogram.v1.Messenger/CreateChannel
+```
+
+With an explicit id:
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d '{"channel_id":"general","name":"General"}' \
+  127.0.0.1:9000 raftogram.v1.Messenger/CreateChannel
+```
+
+Example response:
+
+```json
+{
+  "channelId": "general",
+  "name": "General",
+  "created": true
+}
+```
+
+Save `channelId` for the calls below (or use your own id consistently).
+
+### SendMessage
+
+Appends a message to a channel. `payload` is raw bytes on the wire; in JSON it is **base64** (`SGVsbG8=` is `Hello`).
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d "{
+    \"channel_id\": \"general\",
+    \"author_id\": \"alice\",
+    \"payload\": \"$(echo -n 'Hello' | base64)\",
+    \"client_message_id\": \"msg-1\"
+  }" \
+  127.0.0.1:9000 raftogram.v1.Messenger/SendMessage
+```
+
+Example response:
+
+```json
+{
+  "sequence": "1",
+  "deduplicated": false
+}
+```
+
+Repeating the same `client_message_id` in the same channel returns the original `sequence` with `"deduplicated": true`.
+
+### ReadHistory
+
+Returns committed messages with `sequence > after_sequence`, ascending. Default limit is 100 (server cap 1000).
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d '{"channel_id":"general","after_sequence":"0","limit":50}' \
+  127.0.0.1:9000 raftogram.v1.Messenger/ReadHistory
+```
+
+Example response:
+
+```json
+{
+  "messages": [
+    {
+      "sequence": "1",
+      "authorId": "alice",
+      "payload": "SGVsbG8=",
+      "clientMessageId": "msg-1"
+    }
+  ],
+  "hasMore": false
+}
+```
+
+In protobuf JSON mapping, `uint64` fields such as `sequence` appear as strings; decode `payload` with `base64 -d`.
+
+### Subscribe
+
+Server-streaming RPC: prints `SubscribeChunk` messages as they are committed. Use the leader address; keep the process running and send more messages from another terminal to see chunks.
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d '{"channel_id":"general","after_sequence":"0"}' \
+  127.0.0.1:9000 raftogram.v1.Messenger/Subscribe
+```
+
+Stop with Ctrl+C.
+
+### Calling a follower (not leader)
+
+Unary calls against a follower return `FailedPrecondition` with a `NotLeader` status detail (leader hint when the cluster knows the leader):
+
+```bash
+grpcurl -plaintext -import-path api/proto -proto raftogram/v1/messaging.proto \
+  -d '{"name":"general"}' \
+  127.0.0.1:9001 raftogram.v1.Messenger/CreateChannel
+```
+
+Example error (grpcurl prints decoded details):
+
+```text
+Code: FailedPrecondition
+Message: not leader: retry on suggested leader client endpoint
+Details:
+1)	{
+      "@type": "type.googleapis.com/raftogram.v1.NotLeader",
+      "leaderGrpcTarget": "127.0.0.1:9000",
+      "raftLeaderId": "node1"
+    }
+```
+
+Retry on `leaderGrpcTarget`, or use `leader_grpc_addr` from `/health`.
+
 ## Clean restart (bootstrap from scratch)
 
 Stop all processes and remove data directories:
