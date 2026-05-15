@@ -37,6 +37,7 @@ type FSM struct {
 	maxMessageSize int
 	channels       map[string]*channelState
 	dedupByChannel map[string]map[string]uint64
+	commits        commitHub
 }
 
 type channelState struct {
@@ -94,16 +95,99 @@ func (f *FSM) Apply(logEntry *raft.Log) interface{} {
 	}
 
 	f.mu.Lock()
-	defer f.mu.Unlock()
+
+	var (
+		result        interface{}
+		commitChannel string
+		commitMessage *raftogrampb.StoredMessage
+	)
 
 	switch command := decoded.GetCommand().(type) {
 	case *raftogrampb.RaftLogEntry_CreateChannel:
-		return f.applyCreateChannel(logEntry.Index, command.CreateChannel)
+		result = f.applyCreateChannel(logEntry.Index, command.CreateChannel)
 	case *raftogrampb.RaftLogEntry_SendMessage:
-		return f.applySendMessage(command.SendMessage)
+		result, commitChannel, commitMessage = f.applySendMessage(command.SendMessage)
 	default:
-		return ErrUnknownCommand
+		result = ErrUnknownCommand
 	}
+
+	f.mu.Unlock()
+
+	if commitMessage != nil {
+		f.commits.publish(commitChannel, commitMessage)
+	}
+
+	return result
+}
+
+// SubscribeCommits registers a buffered stream of newly committed messages for
+// channelID. The returned channel receives messages in commit order; Publish
+// blocks when the buffer is full. Call unregister when the subscription ends.
+func (f *FSM) SubscribeCommits(channelID string, bufferSize int) (<-chan *raftogrampb.StoredMessage, func()) {
+	return f.commits.register(channelID, bufferSize)
+}
+
+// ChannelName returns the stored display name for an existing channel.
+func (f *FSM) ChannelName(channelID string) (name string, ok bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	ch, found := f.channels[channelID]
+	if !found {
+		return "", false
+	}
+
+	return ch.name, true
+}
+
+// ReadHistory returns channel messages with sequence > afterSequence in ascending
+// order, capped by limit. hasMore reports whether more messages are available.
+func (f *FSM) ReadHistory(
+	channelID string,
+	afterSequence uint64,
+	limit uint32,
+) ([]*raftogrampb.StoredMessage, bool, error) {
+	if channelID == "" {
+		return nil, false, ErrMissingChannelID
+	}
+
+	if limit == 0 {
+		return []*raftogrampb.StoredMessage{}, false, nil
+	}
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	channel, ok := f.channels[channelID]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: %s", ErrChannelNotFound, channelID)
+	}
+
+	startIdx := sort.Search(len(channel.messages), func(i int) bool {
+		return channel.messages[i].sequence > afterSequence
+	})
+	if startIdx >= len(channel.messages) {
+		return []*raftogrampb.StoredMessage{}, false, nil
+	}
+
+	endIdx := len(channel.messages)
+	maxCount := int(limit)
+	if startIdx+maxCount < endIdx {
+		endIdx = startIdx + maxCount
+	}
+
+	result := make([]*raftogrampb.StoredMessage, 0, endIdx-startIdx)
+	for i := startIdx; i < endIdx; i++ {
+		msg := channel.messages[i]
+		result = append(result, &raftogrampb.StoredMessage{
+			Sequence:        msg.sequence,
+			AuthorId:        msg.authorID,
+			Payload:         slices.Clone(msg.payload),
+			ClientMessageId: msg.clientMessageID,
+		})
+	}
+
+	return result, endIdx < len(channel.messages), nil
 }
 
 func (f *FSM) applyCreateChannel(logIndex uint64, command *raftogrampb.CreateChannelCommand) CreateChannelResult {
@@ -131,20 +215,22 @@ func (f *FSM) applyCreateChannel(logIndex uint64, command *raftogrampb.CreateCha
 	}
 }
 
-func (f *FSM) applySendMessage(command *raftogrampb.SendMessageCommand) interface{} {
+func (f *FSM) applySendMessage(
+	command *raftogrampb.SendMessageCommand,
+) (result interface{}, commitChannel string, commitMessage *raftogrampb.StoredMessage) {
 	channelID := command.GetChannelId()
 	if channelID == "" {
-		return ErrMissingChannelID
+		return ErrMissingChannelID, "", nil
 	}
 
 	channel, ok := f.channels[channelID]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrChannelNotFound, channelID)
+		return fmt.Errorf("%w: %s", ErrChannelNotFound, channelID), "", nil
 	}
 
 	payload := command.GetPayload()
 	if len(payload) > f.maxMessageSize {
-		return fmt.Errorf("%w: %d > %d", ErrPayloadTooLarge, len(payload), f.maxMessageSize)
+		return fmt.Errorf("%w: %d > %d", ErrPayloadTooLarge, len(payload), f.maxMessageSize), "", nil
 	}
 
 	clientMessageID := command.GetClientMessageId()
@@ -153,17 +239,18 @@ func (f *FSM) applySendMessage(command *raftogrampb.SendMessageCommand) interfac
 			return SendMessageResult{
 				Sequence:     dedupedSequence,
 				Deduplicated: true,
-			}
+			}, "", nil
 		}
 	}
 
 	sequence := uint64(len(channel.messages) + 1)
-	channel.messages = append(channel.messages, storedMessage{
+	stored := storedMessage{
 		sequence:        sequence,
 		authorID:        command.GetAuthorId(),
 		payload:         slices.Clone(payload),
 		clientMessageID: clientMessageID,
-	})
+	}
+	channel.messages = append(channel.messages, stored)
 
 	if clientMessageID != "" {
 		if _, ok := f.dedupByChannel[channelID]; !ok {
@@ -173,8 +260,19 @@ func (f *FSM) applySendMessage(command *raftogrampb.SendMessageCommand) interfac
 	}
 
 	return SendMessageResult{
-		Sequence:     sequence,
-		Deduplicated: false,
+			Sequence:     sequence,
+			Deduplicated: false,
+		},
+		channelID,
+		storedMessageToProto(stored)
+}
+
+func storedMessageToProto(msg storedMessage) *raftogrampb.StoredMessage {
+	return &raftogrampb.StoredMessage{
+		Sequence:        msg.sequence,
+		AuthorId:        msg.authorID,
+		Payload:         slices.Clone(msg.payload),
+		ClientMessageId: msg.clientMessageID,
 	}
 }
 

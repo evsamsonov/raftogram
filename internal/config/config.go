@@ -25,6 +25,8 @@ type Cluster struct {
 	RaftBindAddr string `yaml:"raft_bind_addr"`
 	// GRPCBindAddr is the address this node listens on for client gRPC traffic.
 	GRPCBindAddr string `yaml:"grpc_bind_addr"`
+	// HealthBindAddr is the address this node listens on for HTTP /health (orchestrators).
+	HealthBindAddr string `yaml:"health_bind_addr"`
 	// DataDir is the base directory for BoltDB files and Raft snapshots.
 	DataDir string `yaml:"data_dir"`
 	// Peers is the full static voting membership including this node.
@@ -54,7 +56,7 @@ type Config struct {
 // Validate returns an error if the configuration is invalid.
 //
 // Rules enforced here:
-//   - NodeID, RaftBindAddr, GRPCBindAddr, DataDir must be non-empty.
+//   - NodeID, RaftBindAddr, GRPCBindAddr, HealthBindAddr, DataDir must be non-empty.
 //   - At least one peer must be listed.
 //   - The number of voting peers must be odd (quorum safety).
 //   - NodeID must match exactly one peer entry.
@@ -70,6 +72,9 @@ func (c *Config) Validate() error {
 	}
 	if cl.GRPCBindAddr == "" {
 		return errors.New("cluster.grpc_bind_addr is required")
+	}
+	if cl.HealthBindAddr == "" {
+		return errors.New("cluster.health_bind_addr is required")
 	}
 	if cl.DataDir == "" {
 		return errors.New("cluster.data_dir is required")

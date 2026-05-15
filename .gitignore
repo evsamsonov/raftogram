@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+raftogram
 
 # Test binary, built with `go test -c`
 *.test
@@ -20,8 +21,12 @@ go.work.sum
 
 # Local config (use config.yaml.dist as a template)
 config.yaml
+config.node*.yaml
 
 # IDE files
 .cursor
 .idea
 .DS_Store
+
+# Data directory
+data

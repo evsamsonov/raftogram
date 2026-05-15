@@ -43,3 +43,77 @@ message StoredMessage {
   bytes payload = 3;
   string client_message_id = 4;
 }
+
+// ---------------------------------------------------------------------------
+// Client gRPC API (mutations are leader-only; reads/stream per cluster policy).
+// ---------------------------------------------------------------------------
+
+// NotLeader is intended to be attached as a google.golang.org/grpc/status
+// detail when the contacted node rejects a leader-only call. Clients SHOULD
+// retry against leader_grpc_target when non-empty.
+message NotLeader {
+  // gRPC dial target for the leader's client listener (e.g. "10.0.0.3:9090").
+  string leader_grpc_target = 1;
+  // Known Raft leader id (node id), if available.
+  string raft_leader_id = 2;
+}
+
+// Mirrors CreateChannelCommand: empty channel_id is assigned at apply time (FSM).
+message CreateChannelRequest {
+  string channel_id = 1;
+  string name = 2;
+}
+
+message CreateChannelResponse {
+  string channel_id = 1;
+  string name = 2;
+  bool created = 3;
+}
+
+// Mirrors SendMessageCommand for the client API.
+message SendMessageRequest {
+  string channel_id = 1;
+  string author_id = 2;
+  bytes payload = 3;
+  string client_message_id = 4;
+}
+
+message SendMessageResponse {
+  uint64 sequence = 1;
+  bool deduplicated = 2;
+}
+
+// ReadHistory returns committed messages from the leader's applied state.
+// after_sequence is exclusive: messages where sequence > after_sequence, ascending.
+// limit is a requested maximum; servers may enforce a lower cap.
+message ReadHistoryRequest {
+  string channel_id = 1;
+  uint64 after_sequence = 2;
+  uint32 limit = 3;
+}
+
+message ReadHistoryResponse {
+  repeated StoredMessage messages = 1;
+  bool has_more = 2;
+}
+
+// Subscribe streams newly committed messages with sequence > after_sequence.
+message SubscribeRequest {
+  string channel_id = 1;
+  uint64 after_sequence = 2;
+}
+
+// SubscribeChunk batches committed messages. gRPC applies HTTP/2 stream-level
+// flow-control; clients MUST read from the stream promptly or the server may
+// block on Send (backpressure). Bounded server-side buffering is expected in
+// implementation; slow-consumer policy is deployment-specific.
+message SubscribeChunk {
+  repeated StoredMessage messages = 1;
+}
+
+service Messenger {
+  rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc ReadHistory(ReadHistoryRequest) returns (ReadHistoryResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeChunk);
+}

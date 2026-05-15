@@ -18,11 +18,11 @@
 
 ## 4. Клиентский gRPC API
 
-- [ ] 4.1 Описать protobuf для create channel, send, read history, subscribe stream и ошибки not-leader с подсказкой лидера
-- [ ] 4.2 Реализовать gRPC-сервис на лидере: мутации через `Apply`; на фолловере — корректные ошибки маршрутизации
-- [ ] 4.3 Реализовать read history с курсором/лимитом на согласованном состоянии лидера
-- [ ] 4.4 Реализовать subscribe-поток с документированным backpressure (буфер/flow-control gRPC)
-- [ ] 4.5 HTTP `/health` (или аналог) для liveness и полей роли Raft
+- [x] 4.1 Описать protobuf для create channel, send, read history, subscribe stream и ошибки not-leader с подсказкой лидера
+- [x] 4.2 Реализовать gRPC-сервис на лидере: мутации через `Apply`; на фолловере — корректные ошибки маршрутизации
+- [x] 4.3 Реализовать read history с курсором/лимитом на согласованном состоянии лидера
+- [x] 4.4 Реализовать subscribe-поток с документированным backpressure (буфер/flow-control gRPC)
+- [x] 4.5 HTTP `/health` (или аналог) для liveness и полей роли Raft
 
 ## 5. Наблюдаемость и готовность к выкату
 

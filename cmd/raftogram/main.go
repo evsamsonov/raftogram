@@ -49,6 +49,7 @@ func run(ctx context.Context) error {
 		zap.String("node_id", cfg.Cluster.NodeID),
 		zap.String("raft_bind", cfg.Cluster.RaftBindAddr),
 		zap.String("grpc_bind", cfg.Cluster.GRPCBindAddr),
+		zap.String("health_bind", cfg.Cluster.HealthBindAddr),
 		zap.Int("peers", len(cfg.Cluster.Peers)),
 	)
 
@@ -62,7 +63,9 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	node, err := raftcluster.Open(*cfg, messenger.NewDefaultFSM(), stores, logger)
+	fsm := messenger.NewDefaultFSM()
+
+	node, err := raftcluster.Open(*cfg, fsm, stores, logger)
 	if err != nil {
 		return fmt.Errorf("open raft node: %w", err)
 	}
@@ -72,9 +75,7 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	<-ctx.Done()
-	logger.Info("Shutting down")
-	return nil
+	return serveUntilShutdown(ctx, logger, cfg.Cluster, node.Raft, fsm, node)
 }
 
 func buildLogger(dev bool) (*zap.Logger, error) {

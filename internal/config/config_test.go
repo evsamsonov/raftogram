@@ -12,10 +12,11 @@ import (
 func validConfig() *config.Config {
 	return &config.Config{
 		Cluster: config.Cluster{
-			NodeID:       "node1",
-			RaftBindAddr: "127.0.0.1:7000",
-			GRPCBindAddr: "127.0.0.1:9000",
-			DataDir:      "/tmp/node1",
+			NodeID:         "node1",
+			RaftBindAddr:   "127.0.0.1:7000",
+			GRPCBindAddr:   "127.0.0.1:9000",
+			HealthBindAddr: "127.0.0.1:8080",
+			DataDir:        "/tmp/node1",
 			Peers: []config.Peer{
 				{NodeID: "node1", RaftAddr: "127.0.0.1:7000", GRPCAddr: "127.0.0.1:9000"},
 				{NodeID: "node2", RaftAddr: "127.0.0.1:7001", GRPCAddr: "127.0.0.1:9001"},
@@ -70,6 +71,11 @@ func TestValidate(t *testing.T) {
 		{
 			name:    "missing grpc_bind_addr",
 			mutate:  func(c *config.Config) { c.Cluster.GRPCBindAddr = "" },
+			wantErr: true,
+		},
+		{
+			name:    "missing health_bind_addr",
+			mutate:  func(c *config.Config) { c.Cluster.HealthBindAddr = "" },
 			wantErr: true,
 		},
 		{
