@@ -2,6 +2,22 @@
 
 Distributed messenger built on Raft: a static cluster with an **odd** number of voting nodes, gRPC for clients, and HTTP `/health` to inspect node role and leader.
 
+## Contents
+
+- [Requirements](#requirements)
+- [Build](#build)
+- [Local dev cluster](#local-dev-cluster)
+  - [Startup order](#startup-order)
+- [Verify the cluster](#verify-the-cluster)
+- [Client API with grpcurl](#client-api-with-grpcurl)
+  - [CreateChannel](#createchannel)
+  - [SendMessage](#sendmessage)
+  - [ReadHistory](#readhistory)
+  - [Subscribe](#subscribe)
+  - [Calling a follower (not leader)](#calling-a-follower-not-leader)
+- [Clean restart (bootstrap from scratch)](#clean-restart-bootstrap-from-scratch)
+- [Custom configuration](#custom-configuration)
+
 ## Requirements
 
 - [Go](https://go.dev/dl/) **1.26+** (see `go` in `go.mod`)
