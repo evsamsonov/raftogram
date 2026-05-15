@@ -20,13 +20,3 @@ test: ## Run tests
 
 build: ## Build service
 	go build -o raftogram ./cmd/raftogram
-
-doc: ## Run doc server using docker
-	@echo "Doc server runs on http://127.0.0.1:6060"
-	docker run --rm \
-        -p 127.0.0.1:6060:6060 \
-        -v ${PWD}:/go/src/github.com/evsamsonov/stab-quotes-exporter \
-        -w /go/src/github.com/evsamsonov/stab-quotes-exporter \
-        golang:latest \
-        bash -c "go install golang.org/x/tools/cmd/godoc@latest && /go/bin/godoc -http=:6060"
-
